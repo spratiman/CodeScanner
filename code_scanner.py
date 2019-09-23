@@ -9,6 +9,16 @@ class Type:
     """Get language specific information for the type of file."""
 
     def __init__(self, extension):
+        """
+        Initialize the Type class.
+
+        Args:
+            extension: the type of the programming language.
+
+        Returns:
+            None
+
+        """
         self.extension = extension
         self.single_comment = self.get_single_comment(extension)
         self.multi_comment = self.get_multi_comment(extension)
@@ -72,7 +82,7 @@ class Scan:
     @staticmethod
     def process_file(self, file, comment_identifier):
         """
-        Check each line of the file.
+        Check each line of the file and compute the count.
 
         Returns:
             None
@@ -80,46 +90,119 @@ class Scan:
         """
         lines = file.readlines()
         self.lines = len(lines)
+        # Initialize a map of line numbers to its type, where
+        # "u" = unchecked line
+        # "s" = line with a single comment or inline comment
+        # "m" = line with a multi comment or inline multi comment
         line_type = {k+1: "u" for k in range(self.lines)}
 
         for i in range(self.lines):
             line = lines[i]
             next_line = ""
+            previous_line = ""
+            # Assign the next and previous_line line
             if i < self.lines - 1:
                 next_line = lines[i + 1]
+            if i > 0:
+                previous_line = lines[i - 1]
 
             if self.is_single(line.strip(), comment_identifier):
-                # print(line.strip())
-                if line_type[i+1] == "u":
-                    line_type[i+1] = "s"
-            elif self.is_multiple(line.strip(), comment_identifier):
-                print(line.strip())
+                # Map line type to "s"
+                if line_type[i + 1] == "u":
+                    line_type[i + 1] = "s"
 
+            if self.is_multiple(self, line.strip(), comment_identifier,
+                                next_line.strip(), previous_line.strip()):
+                # Map line type to "m"
+                if line_type[i + 1] == "u":
+                    line_type[i + 1] = "m"
+                elif comment_identifier.extension == ".py" and line_type[i + 1] == "s":
+                    line_type[i + 1] = "m"
 
         self.update_counts(self, line_type, lines)
 
     @staticmethod
     def is_single(line, comment_identifier):
+        """
+        Check if the line contains a single line comment.
+
+        Args:
+            line: line to be checked.
+            comment_identifier: Type object with language specific comment
+                                 information
+
+        Returns:
+            bool: Flag for the check
+
+        """
         if line != "" and line.startswith(comment_identifier.single_comment):
+            # the whole line is a single comment
             return True
         elif line != "" and not line.startswith(comment_identifier.single_comment) and comment_identifier.single_comment in line:
+            # the line has an in-line single comment
             return True
         return False
 
     @staticmethod
-    def is_multiple(line, comment_identifier):
-        if line != "" and line.startswith(comment_identifier.single_comment):
+    def is_multiple(self, line, comment_identifier, next_line, previous_line):
+        """
+        Check if the line contains a multi line comment.
+
+        Args:
+            line: line to be checked.
+            comment_identifier:  Type object with language specific comment
+                                 information
+            next_line: the line after the current line to be checked.
+            previous_line: the line before the current line to be checked.
+
+        Returns:
+            bool: Flag for the check
+
+        """
+        if line != "" and comment_identifier.extension == ".py" and line.startswith(comment_identifier.multi_comment[0]) and next_line.startswith(comment_identifier.multi_comment[0]) and not previous_line.startswith(comment_identifier.multi_comment[0]):
+            # beginning of a python code block
+            self.block_comments += 1
             return True
-        elif line != "" and not line.startswith(comment_identifier.single_comment) and comment_identifier.single_comment in line:
+        elif line != "" and comment_identifier.extension == ".py" and line.startswith(comment_identifier.multi_comment[0]) and (next_line.startswith(comment_identifier.multi_comment[0]) or previous_line.startswith(comment_identifier.multi_comment[0])):
+            # middle or end of a python code block
             return True
-        return False
+        elif line != "" and comment_identifier.extension != ".py" and comment_identifier.multi_comment[0] in line:
+            # beginning of a java and js code block
+            self.block_comments += 1
+            return True
+        elif line != "" and comment_identifier.extension != ".py" and line.startswith("*"):
+            # middle or end of a java or js code block
+            return True
+        elif line != "" and comment_identifier.extension != ".py" and comment_identifier.multi_comment[-1] in line:
+            # in-line code block in java or js
+            self.block_comments += 1
+            return True
 
     @staticmethod
     def update_counts(self, line_type, lines):
+        """
+        Updates the Scan object counts for the final output.
+
+        Args:
+            line_type = dict to store the type of line for each line of the file
+            lines = array of lines read from the file
+
+        Returns:
+            None
+
+        """
         for key, val in line_type.items():
             if val == "s":
+                # line is a single comment
                 self.single_line_comments += 1
                 if "TODO:" in lines[key-1]:
+                    # line is a todo single comment
+                    self.todo += 1
+            elif val == "m":
+                # line is a block comment
+                self.multi_line_comments += 1
+                if "TODO:" in lines[key-1]:
+                    # line is a multi block comment todo
                     self.todo += 1
 
 
@@ -138,16 +221,24 @@ def main(file):
         TypeError
 
     """
+    # Extract the file extension from the path
     extension = os.path.splitext(file)[-1].lower()
     if (file.startswith(".") and not (file.startswith("./")
                                       or file.startswith(".\\"))) or (extension
                                                                       == ""):
+        # File is not an acceptable program file
         raise TypeError("Invalid program file")
     else:
         comment_identifier = Type(extension)
         with open(file) as f:
             scan = Scan(f, comment_identifier)
-            print("Total # of lines: {} \nTotal # of single line comments: {}\nTotal # of TODO's: {}".format(scan.lines, scan.single_line_comments, scan.todo))
+            print("Total # of lines: {} \nTotal # of comment lines: {} \nTotal # of single line comments: {}\nTotal # of comment lines within block comments: {}\nTotal # of block line comments: {}\nTotal # of TODO's: {}".format(scan.lines,
+                                                                                                                                                                                                                                     scan.single_line_comments +
+                                                                                                                                                                                                                                     scan.multi_line_comments,
+                                                                                                                                                                                                                                     scan.single_line_comments,
+                                                                                                                                                                                                                                     scan.multi_line_comments,
+                                                                                                                                                                                                                                     scan.block_comments,
+                                                                                                                                                                                                                                     scan.todo))
 
 
 if __name__ == "__main__":
