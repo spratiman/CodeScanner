@@ -92,11 +92,11 @@ class Scan:
                 # print(line.strip())
                 if line_type[i+1] == "u":
                     line_type[i+1] = "s"
-            # elif self.is_multiple(line.strip(), comment_identifier):
-            #     print(line.strio())
+            elif self.is_multiple(line.strip(), comment_identifier):
+                print(line.strip())
 
 
-        self.update_counts(self, line_type)
+        self.update_counts(self, line_type, lines)
 
     @staticmethod
     def is_single(line, comment_identifier):
@@ -115,10 +115,12 @@ class Scan:
         return False
 
     @staticmethod
-    def update_counts(self, line_type):
+    def update_counts(self, line_type, lines):
         for key, val in line_type.items():
             if val == "s":
                 self.single_line_comments += 1
+                if "TODO:" in lines[key-1]:
+                    self.todo += 1
 
 
 def main(file):
@@ -145,7 +147,7 @@ def main(file):
         comment_identifier = Type(extension)
         with open(file) as f:
             scan = Scan(f, comment_identifier)
-            print("Total # of lines: {} \nTotal # of single line comments: {}".format(scan.lines, scan.single_line_comments))
+            print("Total # of lines: {} \nTotal # of single line comments: {}\nTotal # of TODO's: {}".format(scan.lines, scan.single_line_comments, scan.todo))
 
 
 if __name__ == "__main__":
